@@ -22,7 +22,13 @@ export function usePushNotifications() {
       }
 
       try {
-        const registration = await navigator.serviceWorker.ready;
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        if (registrations.length === 0) {
+          setState("prompt");
+          return;
+        }
+
+        const registration = registrations[0];
         const subscription = await registration.pushManager.getSubscription();
 
         if (subscription) {
