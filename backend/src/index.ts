@@ -2,6 +2,14 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import {
+  initWebPush,
+  getVapidPublicKey,
+  saveSubscription,
+  removeSubscription,
+  notifySonnet5Dropped,
+  type PushSubscription,
+} from "./notifications.js";
 
 const app = new Hono();
 
@@ -21,6 +29,7 @@ let lastStatus: StatusData = {
 
 let lastEtag: string | null = null;
 let isChecking = false;
+let previouslyFound = false;
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
@@ -51,15 +60,6 @@ function isSonnet5(text: string): boolean {
     }
   }
   return false;
-}
-
-function extractSonnet5Model(text: string): string | null {
-  if (!isSonnet5(text)) return null;
-  for (const pattern of SONNET_5_PATTERNS) {
-    const match = text.match(pattern);
-    if (match) return match[0];
-  }
-  return null;
 }
 
 async function checkAnthropicModels(): Promise<{
@@ -185,6 +185,11 @@ async function performCheck(): Promise<void> {
     console.log(
       `[${lastStatus.checkedAt}] Check complete: found=${found}, model=${model}, source=${source}`
     );
+
+    if (found && !previouslyFound) {
+      previouslyFound = true;
+      await notifySonnet5Dropped(model, source);
+    }
   } catch (error) {
     console.error("Check failed:", error);
   } finally {
@@ -197,7 +202,7 @@ app.use(
   "*",
   cors({
     origin: "*",
-    allowMethods: ["GET", "OPTIONS"],
+    allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
   })
 );
 
@@ -218,6 +223,52 @@ app.post("/check", async (c) => {
   return c.json(lastStatus);
 });
 
+app.get("/push/vapid-public-key", (c) => {
+  const key = getVapidPublicKey();
+  if (!key) {
+    return c.json({ error: "Web Push not configured" }, 503);
+  }
+  return c.json({ publicKey: key });
+});
+
+app.post("/push/subscribe", async (c) => {
+  try {
+    const subscription = (await c.req.json()) as PushSubscription;
+
+    if (!subscription.endpoint || !subscription.keys) {
+      return c.json({ error: "Invalid subscription" }, 400);
+    }
+
+    await saveSubscription(subscription);
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Subscribe error:", error);
+    return c.json({ error: "Failed to save subscription" }, 500);
+  }
+});
+
+app.delete("/push/subscribe", async (c) => {
+  try {
+    const { endpoint } = (await c.req.json()) as { endpoint: string };
+
+    if (!endpoint) {
+      return c.json({ error: "Missing endpoint" }, 400);
+    }
+
+    await removeSubscription(endpoint);
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Unsubscribe error:", error);
+    return c.json({ error: "Failed to remove subscription" }, 500);
+  }
+});
+
+app.get("/ntfy/topic", (c) => {
+  const topic = process.env.NTFY_TOPIC || "did-sonnet5-drop";
+  return c.json({ topic, url: `https://ntfy.sh/${topic}` });
+});
+
+initWebPush();
 performCheck();
 setInterval(performCheck, 60 * 1000);
 

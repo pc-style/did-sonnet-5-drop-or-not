@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { usePushNotifications } from "./hooks/usePushNotifications";
+import { useNtfyTopic } from "./hooks/useNtfyTopic";
 import "./App.css";
 
 interface StatusData {
@@ -14,6 +16,10 @@ function App() {
   const [status, setStatus] = useState<StatusData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showNotifyPanel, setShowNotifyPanel] = useState(false);
+
+  const push = usePushNotifications();
+  const ntfy = useNtfyTopic();
 
   useEffect(() => {
     async function fetchStatus() {
@@ -95,6 +101,78 @@ function App() {
                   </div>
                 </div>
               )}
+
+              <div className="notify-section">
+                <button
+                  className="notify-toggle"
+                  onClick={() => setShowNotifyPanel(!showNotifyPanel)}
+                >
+                  <BellIcon />
+                  <span>Get notified when it drops</span>
+                  <ChevronIcon open={showNotifyPanel} />
+                </button>
+
+                {showNotifyPanel && (
+                  <div className="notify-panel">
+                    <div className="notify-option">
+                      <div className="notify-option-header">
+                        <span className="notify-option-icon">
+                          <BrowserIcon />
+                        </span>
+                        <div className="notify-option-info">
+                          <span className="notify-option-title">Browser Push</span>
+                          <span className="notify-option-desc">Instant notification</span>
+                        </div>
+                      </div>
+                      {push.state === "unsupported" ? (
+                        <span className="notify-status muted">Not supported</span>
+                      ) : push.state === "denied" ? (
+                        <span className="notify-status muted">Blocked</span>
+                      ) : push.state === "loading" ? (
+                        <span className="notify-status">...</span>
+                      ) : push.state === "subscribed" ? (
+                        <button className="notify-btn active" onClick={push.unsubscribe}>
+                          Enabled
+                        </button>
+                      ) : (
+                        <button className="notify-btn" onClick={push.subscribe}>
+                          Enable
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="notify-divider" />
+
+                    <div className="notify-option">
+                      <div className="notify-option-header">
+                        <span className="notify-option-icon">
+                          <PhoneIcon />
+                        </span>
+                        <div className="notify-option-info">
+                          <span className="notify-option-title">ntfy.sh</span>
+                          <span className="notify-option-desc">iOS/Android app</span>
+                        </div>
+                      </div>
+                      <a
+                        href={ntfy.url || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="notify-btn"
+                      >
+                        Subscribe
+                      </a>
+                    </div>
+
+                    {ntfy.topic && (
+                      <div className="notify-topic">
+                        Topic: <code>{ntfy.topic}</code>
+                      </div>
+                    )}
+
+                    {push.error && <div className="notify-error">{push.error}</div>}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -110,6 +188,50 @@ function App() {
         </div>
       </footer>
     </>
+  );
+}
+
+function BellIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+}
+
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
+function BrowserIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <line x1="3" y1="9" x2="21" y2="9" />
+      <line x1="9" y1="21" x2="9" y2="9" />
+    </svg>
+  );
+}
+
+function PhoneIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="5" y="2" width="14" height="20" rx="2" />
+      <line x1="12" y1="18" x2="12" y2="18" />
+    </svg>
   );
 }
 
